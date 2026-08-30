@@ -11,25 +11,12 @@ import (
 )
 
 type Overview struct {
-	list      widget.List
-	choices   []model.Scenario
-	buttons   []widget.Clickable
-	selectOne func(model.Scenario)
+	list widget.List
 }
 
-func NewOverview(selectOne func(model.Scenario)) *Overview {
-	choices := model.Scenarios()
+func NewOverview() *Overview {
 	return &Overview{
-		list:    widget.List{List: layout.List{Axis: layout.Vertical}},
-		choices: choices, buttons: make([]widget.Clickable, len(choices)), selectOne: selectOne,
-	}
-}
-
-func (p *Overview) Update(gtx layout.Context) {
-	for i := range p.buttons {
-		for p.buttons[i].Clicked(gtx) {
-			p.selectOne(p.choices[i])
-		}
+		list: widget.List{List: layout.List{Axis: layout.Vertical}},
 	}
 }
 
@@ -50,7 +37,6 @@ func (p *Overview) Layout(gtx layout.Context, t *material.Theme, s model.Snapsho
 							components.Label(t, 12, "Your connection, at a glance.", components.Muted, false),
 						)
 					},
-					func(gtx layout.Context) layout.Dimensions { return p.scenarioPicker(gtx, t, s.State) },
 					func(gtx layout.Context) layout.Dimensions {
 						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return components.StatusBadge(gtx, t, s) }),
@@ -61,7 +47,7 @@ func (p *Overview) Layout(gtx layout.Context, t *material.Theme, s model.Snapsho
 					func(gtx layout.Context) layout.Dimensions {
 						return components.Row(gtx, 12,
 							func(gtx layout.Context) layout.Dimensions {
-								return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.SignalScore(gtx, t, s, false) })
+								return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.SignalStrength(gtx, t, s, false) })
 							},
 							func(gtx layout.Context) layout.Dimensions {
 								return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.NetworkInfo(gtx, t, s.Reading, false) })
@@ -71,12 +57,17 @@ func (p *Overview) Layout(gtx layout.Context, t *material.Theme, s model.Snapsho
 					func(gtx layout.Context) layout.Dimensions { return p.metrics(gtx, t, s) },
 					func(gtx layout.Context) layout.Dimensions {
 						return components.Card(gtx, func(gtx layout.Context) layout.Dimensions {
-							return components.ConnectionStats(gtx, t, s.Reading, false)
+							return components.Column(gtx, 8,
+								components.Label(t, 11, "CURRENT MODEM TRAFFIC · NOT A SPEED TEST", components.Muted, true),
+								func(gtx layout.Context) layout.Dimensions {
+									return components.ConnectionStats(gtx, t, s.Reading, false)
+								},
+							)
 						})
 					},
 					func(gtx layout.Context) layout.Dimensions { return p.charts(gtx, t, s) },
 					components.Label(t, 11, components.UpdateText(s, gtx.Now), components.Muted, false),
-					components.Label(t, 11, "Demo only · no device connected · no speed test", components.Muted, false),
+					components.Label(t, 11, "192.168.100.1 · RSRQ/SINR units unverified: raw values shown. Ping is not provided by these endpoints.", components.Muted, false),
 				}
 				return material.List(t, &p.list).Layout(gtx, len(rows), func(gtx layout.Context, index int) layout.Dimensions {
 					return (layout.Inset{Bottom: 12, Right: 8}).Layout(gtx, rows[index])
@@ -92,7 +83,7 @@ func (p *Overview) sidebar(gtx layout.Context, t *material.Theme) layout.Dimensi
 		components.Label(t, 10, "CONNECTION MONITOR", components.Muted, false),
 		func(gtx layout.Context) layout.Dimensions {
 			return layout.W.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return components.Badge(gtx, t, "Demo", components.Accent)
+				return components.Badge(gtx, t, "Live", components.Accent)
 			})
 		},
 		layout.Spacer{Height: 16}.Layout,
@@ -114,43 +105,9 @@ func (p *Overview) sidebar(gtx layout.Context, t *material.Theme) layout.Dimensi
 	return components.Column(gtx, 10, items...)
 }
 
-func (p *Overview) scenarioPicker(gtx layout.Context, t *material.Theme, selected model.Scenario) layout.Dimensions {
-	return components.Column(gtx, 7,
-		components.Label(t, 10, "DEMO SCENARIO", components.Muted, true),
-		func(gtx layout.Context) layout.Dimensions {
-			// Use two rows at narrow widths or larger text scales.
-			count := 5
-			if gtx.Constraints.Max.X < gtx.Sp(unit.Sp(620)) {
-				count = 3
-			}
-			var rows []layout.Widget
-			for start := 0; start < len(p.choices); start += count {
-				end := min(start+count, len(p.choices))
-				rows = append(rows, func(gtx layout.Context) layout.Dimensions {
-					var buttons []layout.Widget
-					for i := start; i < end; i++ {
-						buttons = append(buttons, func(gtx layout.Context) layout.Dimensions {
-							b := material.Button(t, &p.buttons[i], string(p.choices[i]))
-							b.TextSize = 11
-							b.Inset = layout.Inset{Top: 8, Bottom: 8, Left: 5, Right: 5}
-							b.CornerRadius = 7
-							if selected != p.choices[i] {
-								b.Background, b.Color = components.Surface, components.Foreground
-							}
-							return b.Layout(gtx)
-						})
-					}
-					return components.Row(gtx, 6, buttons...)
-				})
-			}
-			return components.Column(gtx, 6, rows...)
-		},
-	)
-}
-
 func (p *Overview) metrics(gtx layout.Context, t *material.Theme, s model.Snapshot) layout.Dimensions {
 	names := []string{"RSRP", "RSRQ", "SINR", "RSSI"}
-	units := []string{"dBm", "dB", "dB", "dBm"}
+	units := []string{"dBm", "raw", "raw", "dBm"}
 	values := []model.Value[float64]{s.Reading.RSRP, s.Reading.RSRQ, s.Reading.SINR, s.Reading.RSSI}
 	var columns []layout.Widget
 	for i := range names {

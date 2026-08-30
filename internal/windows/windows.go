@@ -2,6 +2,7 @@
 package windows
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -12,7 +13,8 @@ import (
 	"gioui.org/unit"
 
 	"example.com/4g-monitor/internal/components"
-	"example.com/4g-monitor/internal/mock"
+	"example.com/4g-monitor/internal/modem"
+	"example.com/4g-monitor/internal/monitor"
 	"example.com/4g-monitor/internal/pages"
 )
 
@@ -35,10 +37,20 @@ func newHandle() *windowHandle {
 	}
 }
 
-// Run returns only after the widget, its ticker, and any dashboard have stopped.
+// Run returns only after the windows, polling worker, and requests have stopped.
 // main must call app.Main on the main goroutine.
 func Run() error {
-	store := mock.NewStore()
+	store := monitor.NewStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	pollDone := make(chan struct{})
+	go func() {
+		defer close(pollDone)
+		modem.NewClient().Run(ctx, store.Apply)
+	}()
+	defer func() {
+		cancel()
+		<-pollDone // No store/window lock is held while joining the worker.
+	}()
 	openDashboard := make(chan struct{}, 1)
 	closed := make(chan closedWindow, 2)
 	widgetWindow := newHandle()
@@ -62,9 +74,8 @@ func Run() error {
 			if closing {
 				continue
 			}
-			// Use processing time: a queued tick must not predate a manual
-			// Online transition that just published an immediate sample.
-			store.Tick(time.Now())
+			// Repaint data age while requests are in flight or data is stale.
+			// This ticker never writes a measurement or starts a request.
 			widgetWindow.window.Invalidate()
 			if dashboard != nil {
 				dashboard.window.Invalidate()
@@ -94,6 +105,7 @@ func Run() error {
 			if result.handle == widgetWindow {
 				closing = true
 				widgetErr = result.err
+				cancel()
 				ticker.Stop()
 				if dashboard != nil {
 					close(dashboard.close)
@@ -112,19 +124,19 @@ func Run() error {
 	}
 }
 
-func (h *windowHandle) loop(isWidget bool, store *mock.Store, open func(), closed chan<- closedWindow) {
+func (h *windowHandle) loop(isWidget bool, store *monitor.Store, open func(), closed chan<- closedWindow) {
 	var err error
 	defer func() { closed <- closedWindow{handle: h, err: err} }()
 	if isWidget {
-		h.window.Option(app.Title("4G Monitor · Demo"), app.Size(unit.Dp(300), unit.Dp(380)),
+		h.window.Option(app.Title("4G Monitor · Live"), app.Size(unit.Dp(300), unit.Dp(380)),
 			app.MinSize(unit.Dp(300), unit.Dp(380)), app.MaxSize(unit.Dp(300), unit.Dp(380)), app.TopMost(true))
 	} else {
-		h.window.Option(app.Title("4G Monitor · Overview · Demo"), app.Size(unit.Dp(900), unit.Dp(650)),
+		h.window.Option(app.Title("4G Monitor · Overview · Live"), app.Size(unit.Dp(900), unit.Dp(650)),
 			app.MinSize(unit.Dp(760), unit.Dp(520)))
 	}
 	theme := components.NewTheme()
 	widgetPage := pages.Widget{Open: open}
-	overview := pages.NewOverview(store.Select)
+	overview := pages.NewOverview()
 	var ops op.Ops
 	closing := false
 	for {
@@ -151,10 +163,7 @@ func (h *windowHandle) loop(isWidget bool, store *mock.Store, open func(), close
 		if frame, ok := e.(app.FrameEvent); ok {
 			gtx := app.NewContext(&ops, frame)
 			paint.Fill(gtx.Ops, components.Background)
-			// Process scenario input before taking this frame's single snapshot.
-			if !isWidget && !closing {
-				overview.Update(gtx)
-			}
+			// Both pages use one detached, coherent snapshot per frame.
 			snapshot := store.Snapshot()
 			if isWidget {
 				widgetPage.Layout(gtx, theme, snapshot)

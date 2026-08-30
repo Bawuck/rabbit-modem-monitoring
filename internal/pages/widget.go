@@ -34,7 +34,7 @@ func (p *Widget) Layout(gtx layout.Context, t *material.Theme, s model.Snapshot)
 							)
 						},
 						func(gtx layout.Context) layout.Dimensions {
-							return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.SignalScore(gtx, t, s, true) })
+							return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.SignalStrength(gtx, t, s, true) })
 						},
 						func(gtx layout.Context) layout.Dimensions {
 							return components.Card(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -45,10 +45,10 @@ func (p *Widget) Layout(gtx layout.Context, t *material.Theme, s model.Snapshot)
 												return components.SignalMetric(gtx, t, "RSRP", "dBm", s.Reading.RSRP, true)
 											},
 											func(gtx layout.Context) layout.Dimensions {
-												return components.SignalMetric(gtx, t, "RSRQ", "dB", s.Reading.RSRQ, true)
+												return components.SignalMetric(gtx, t, "RSRQ", "raw", s.Reading.RSRQ, true)
 											},
 											func(gtx layout.Context) layout.Dimensions {
-												return components.SignalMetric(gtx, t, "SINR", "dB", s.Reading.SINR, true)
+												return components.SignalMetric(gtx, t, "SINR", "raw", s.Reading.SINR, true)
 											},
 										)
 									},

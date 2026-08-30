@@ -1,106 +1,125 @@
 # 4G Monitor
 
-MVP desktop Windows dengan Go + Gio: widget always-on-top, satu dashboard
-Overview, dan mock data deterministik. Semua UI ditulis dalam Go; tidak ada
-HTML, CSS, JavaScript, Electron, atau WebView.
+Aplikasi desktop Windows dengan Go + Gio: widget always-on-top, satu dashboard
+Overview, dan data modem live dari `192.168.100.1`. Semua UI ditulis dalam Go;
+tidak menggunakan HTML, CSS, JavaScript, Electron, atau WebView.
 
-**Status: implementasi source dengan pemeriksaan statis. Build dan aplikasi
-belum dijalankan; tidak ada unit test yang dibuat atau dijalankan.**
+**Status: implementasi source dan pemeriksaan statis. Build dan aplikasi hasil
+integrasi belum dijalankan; tidak membuat atau menjalankan unit test.**
 
-## Menjalankan sendiri
+## Menjalankan
 
-Prasyarat: Windows 10/11 dengan driver grafis yang mendukung Gio, Go 1.27.0 atau
-lebih baru, dan koneksi internet saat dependency pertama kali diunduh.
-Gio dikunci ke versi `v0.10.2`. Tidak perlu Node.js atau toolchain C untuk
-konfigurasi default Windows.
+Prasyarat: Windows 10/11, driver grafis yang mendukung Gio, Go 1.27.0 atau lebih
+baru, dan akses LAN ke modem. Internet diperlukan untuk mengunduh dependency
+pertama kali. Gio tetap dikunci ke `v0.10.2`.
 
-Dari direktori proyek ini, jalankan di PowerShell:
+Jalankan sendiri dari PowerShell:
 
 ```powershell
-go run -ldflags="-H windowsgui" ./cmd/4g-monitor
+cd C:\Go\rabbit-monitoring
+go run ./cmd/4g-monitor
 ```
 
-Perintah di atas akan mengompilasi lalu menjalankan aplikasi ketika Anda
-mengeksekusinya. Perintah tersebut **tidak dijalankan selama implementasi**.
-Untuk melihat pesan startup/error di terminal, hilangkan opsi `-ldflags`.
+Untuk executable GUI tanpa console, gunakan opsi linker
+`go run -ldflags="-H windowsgui" ./cmd/4g-monitor`.
+Perintah tersebut mengompilasi dan menjalankan aplikasi; tidak dijalankan selama
+implementasi ini.
 
-## Perilaku
+## Window dan tampilan
 
-- Widget: area konten awal 300 × 380 dp, ukuran tetap, always-on-top aktif.
-- Dashboard: area konten awal 900 × 650 dp, dapat diperbesar; Overview dapat
-  digulir jika teks atau skala layar membutuhkan ruang tambahan.
-- Ukuran menggunakan dp, bukan pixel fisik. Pada scaling 100%, satu dp kira-kira
-  satu pixel. Title bar/border Windows menambah ukuran luar window.
-- Title bar native dipertahankan agar window dapat dipindah, diminimalkan,
-  dan ditutup dengan mouse maupun keyboard. Kartu di dalam UI membulat.
-- Klik konten widget (atau fokus lalu Enter/Space) membuka Overview. Klik lagi
-  memfokuskan/memulihkan dashboard yang sama. Widget tetap always-on-top.
-- Menutup Overview hanya menutup dashboard. Menutup widget mengakhiri seluruh
-  aplikasi dan menghentikan ticker. Tidak ada proses tray/background setelah exit.
-- Widget dan dashboard memakai store yang sama; masing-masing mengambil salinan
-  snapshot konsisten untuk satu frame. Repaint antar-window tidak harus bersamaan.
-- Demo dimulai dalam Loading; setelah 2 detik menjadi Online. Pilihan Loading
-  manual tetap Loading hingga pengguna memilih skenario lain.
-- Nilai mock berganti tiap 2 detik, dalam urutan tetap. Score dan label kualitas
-  adalah fixture, bukan hasil perhitungan kualitas sinyal.
-- History menyimpan maksimal 30 sampel dalam memori (sekitar 1 menit). Tidak ada
-  history palsu sebelum sampel pertama. Kembali ke Online memulai segmen baru.
-- Grafik memiliki skala sendiri per metrik, label rentang nilai, serta timestamp
-  awal/akhir. Data yang hilang tidak digambar sebagai angka nol.
-- Download/upload menggunakan Mbps; ping menggunakan ms. Semua angka simulasi,
-  bukan hasil speed test. `M` pada widget berarti Mbps, bukan MB/s.
-- Label Demo selalu ada pada kedua window. Signal, Cell, History, dan Settings
-  ditampilkan nonaktif dengan label Coming soon.
+- Widget: konten tetap 300 × 380 dp, always-on-top, title bar native.
+- Dashboard: konten awal 900 × 650 dp, minimum 760 × 520 dp, dapat diperbesar
+  dan digulir; grafik tersusun vertikal pada area konten yang lebih sempit.
+- Klik konten widget membuka dashboard; klik berikutnya memfokuskan/memulihkan
+  instance yang sama. Enter/Space pada widget yang fokus juga dapat membukanya.
+- Menutup dashboard tidak menghentikan widget atau polling. Menutup widget
+  membatalkan request aktif, menghentikan worker/ticker, dan menutup dashboard.
+- Kedua window berlabel Live. Tidak ada mode atau pemilih skenario Demo.
+- Signal, Cell, History, dan Settings tetap nonaktif dengan Coming soon.
+- Setiap window memiliki shaper, state interaksi, dan event loop sendiri.
+  Window mengambil satu salinan snapshot per frame; repaint tidak harus serentak.
 
-## Skenario demo
+## Endpoint dan pemetaan
 
-Pemilih skenario berada di bagian atas Overview.
+Dua URL GET lengkap hardcoded sebagai `SignalURL` dan `StatusURL` di
+[internal/modem/client.go](internal/modem/client.go). Keduanya mempertahankan
+host, path `/goform/goform_get_cmd_process`, dan seluruh query dari pengguna.
+Tidak ada pengaturan URL, autentikasi otomatis, cookie, atau proxy sistem;
+redirect tidak diikuti. Tidak ada request untuk mengubah konfigurasi modem.
 
-| Skenario | Tampilan | Pembaruan |
+| Tampilan | Field | Perlakuan |
 | --- | --- | --- |
-| Loading | Placeholder `—`, tidak ada chart/current data | Menunggu pilihan pengguna; startup saja otomatis Online |
-| Online | Nilai valid, LTE/LTE-A, score, grafik | Sampel baru tiap 2 detik |
-| No Signal | Semua pengukuran `—`, chart kosong | Tidak ada pengukuran baru |
-| API Error | Error simulasi; data terakhir berlabel stale bila ada | Nilai dan timestamp terakhir dibekukan |
-| Disconnected | Status terputus; data terakhir berlabel stale bila ada | Nilai dan timestamp terakhir dibekukan |
+| Network | network_type, sub_network_type | FDD_LTE/TDD_LTE menjadi LTE; LTE-A hanya bila dinyatakan eksplisit |
+| Signal Strength | signalbar | Integer 0–5, ditampilkan sebagai bar dan n/5; tanpa score buatan |
+| RSRP / RSSI | lte_rsrp / rssi | dBm; tidak ada konversi tanda tanpa bukti |
+| RSRQ / SINR | nv_rsrq / nv_sinr | Raw, termasuk unit sumbu grafik; konversi dB belum terverifikasi |
+| Band / PCI | lte_band / nv_pci | Band numerik menjadi Bn; PCI LTE 0–503 |
+| Download / Upload | realtime_rx_thrpt / realtime_tx_thrpt | Bytes/detik × 8 ÷ 1.000.000; Mbps dengan tiga desimal |
+| Ping | Tidak disediakan | Selalu —, dengan keterangan No API data |
+| Updated | Waktu penerimaan siklus sukses | Dibekukan selama data stale |
 
-Jika error/terputus sebelum ada sampel sukses, nilai tetap `—` dan tidak ada
-timestamp pembaruan. Waktu relatif terakhir tetap bertambah saat stale, tetapi
-bukan berarti ada sampel baru. Loading/No Signal menyembunyikan data lama dari
-view, tanpa menghapus cache sampel sukses untuk skenario stale berikutnya.
+Trafik adalah aktivitas modem saat itu, bukan speed test. Durasi GET bukan ping.
+Metrik khusus LTE disembunyikan bila jenis jaringan bukan LTE/LTE-A.
+Nilai opsional kosong/null/tidak valid menjadi `—`; angka nol tetap valid.
+ICCID, SSID, dan field tak terpakai tidak masuk model, log, atau penyimpanan.
+Body respons hanya dibaca sementara untuk decoding, maksimal 1 MiB per endpoint.
 
-## Struktur
+## Polling dan status
 
-```text
-cmd/4g-monitor/       Entry point dan lifecycle proses Gio
-internal/windows/    Widget, singleton dashboard, event loop dan shutdown
-internal/model/      Snapshot, reading, nilai opsional, status dan timestamp
-internal/mock/       Store tersinkronisasi, fixture dan history terbatas
-internal/components/ Theme, Header, SignalScore, SignalMetric, SignalChart,
-                     NetworkInfo, ConnectionStats dan StatusBadge
-internal/pages/      Widget dan Overview
-```
+Poll pertama langsung saat startup, lalu setiap 2 detik. Satu worker menjalankan
+dua GET paralel dengan deadline siklus 5 detik. Tick selama siklus masih berjalan
+dilewati; tidak ada antrean polling. HTTP tidak berjalan pada event loop UI.
 
-Store tidak mengandung object Gio. Rendering, shaper, dan state interaksi
-dimiliki masing-masing window. Permintaan raise/close melalui channel dan
-diproses oleh event loop window pemilik; hanya `Invalidate` dipanggil lintas
-goroutine. Tidak ada API publik/server, database, system tray, polling modem,
-autostart Windows, atau persistence pengaturan.
+Kedua respons harus berhasil sebelum satu snapshot dipublikasikan. Data radio
+berasal dari endpoint pertama; status PPP/bar/throughput dari endpoint kedua.
+Kedua GET bukan transaksi atomik di modem, tetapi publikasi di aplikasi atomik.
 
-## Verifikasi
+| Status | Kondisi | Tampilan |
+| --- | --- | --- |
+| Loading | Belum ada hasil siklus pertama | Placeholder |
+| Online | PPP terhubung dan jaringan tersedia | Pengukuran live dan sampel baru |
+| No Signal | Jaringan kosong/no service/limited service | Pengukuran dan grafik disembunyikan |
+| Disconnected | Transport gagal/timeout, atau PPP belum terhubung | Snapshot Online terakhir berlabel stale |
+| API Error | HTTP gagal/redirect, HTML login, JSON rusak/terlalu besar, status wajib hilang/tidak dikenal | Snapshot Online terakhir berlabel stale |
 
-Package internal telah dilengkapi dari entry point dan dokumentasi yang tersedia.
-Source diformat dengan gofmt dan ditinjau statis terhadap source Gio `v0.10.2`
-yang tersedia di module cache, termasuk API window, layout, dan chart.
-Peninjauan mencakup snapshot terpisah, pembatasan history, transisi state,
-kepemilikan window, serta penghentian ticker dan event loop.
+Struktur wajib: network_type berupa string (boleh kosong untuk No Signal) dan
+ppp_status berupa string yang dikenal. Status PPP yang didukung: ppp_connected,
+ppp_connecting, ppp_disconnecting, dan ppp_disconnected.
 
-Klaim lama tentang `go list` dan `go mod verify` tidak digunakan sebagai bukti
-untuk implementasi ini. Tidak menjalankan keduanya, `go build`, `go run`,
-`go test`, atau `go vet`; tidak membuat unit test. Pemeriksaan statis dan gofmt
-bukan type-check penuh, kompilasi, atau verifikasi visual/runtime.
-Daftar pemeriksaan runtime untuk pengguna ada di [MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md).
+Saat gagal sebelum Online pertama, nilai tetap `—`. Cache sukses tetap tersedia
+setelah No Signal untuk kegagalan berikutnya. Usia data bertambah saat stale;
+timestamp pengukuran tidak berubah. Polling terus mencoba otomatis.
 
-Referensi: [Gio untuk Windows](https://gioui.org/doc/install/windows),
-[TopMost](https://pkg.go.dev/gioui.org@v0.10.2/app#TopMost).
-# rabbit-monitoring
+History hanya menyimpan 30 sampel Online terbaru dalam memori (sekitar 1 menit
+bila respons lancar). Nilai hilang memutus garis. Kembali ke Online memulai
+segmen baru; tidak menghubungkan garis melewati outage.
+
+## Struktur dan batasan
+
+- `internal/modem`: client HTTP, pemetaan field, worker polling.
+- `internal/monitor`: store tersinkronisasi dan history terbatas.
+- `internal/model`: tipe data, nilai opsional, status, update/snapshot.
+- `internal/windows`: lifecycle dua window dan pembatalan worker.
+- `internal/components`, `internal/pages`: UI Gio dan grafik.
+- `cmd/4g-monitor`: entry point.
+
+Tidak ada database, persistence, system tray, autostart, speed test, rumus score,
+atau kontrol modem. HTTP modem tidak terenkripsi; gunakan hanya pada LAN tepercaya.
+
+## Verifikasi dan pekerjaan lanjutan
+
+Pada sesi perencanaan 31 Agustus 2026, GET kedua endpoint memperoleh HTTP 200
+tanpa cookie/login tambahan, dengan JSON ber-Content-Type text/html.
+JavaScript modem memformat throughput bytes/detik menjadi bit/detik dengan ×8.
+Temuan tersebut tidak membuktikan runtime client Go atau UI hasil integrasi.
+
+Pemeriksaan implementasi terbatas pada parsing/format `gofmt`, penelusuran
+import dan source, review alur data/lifecycle, serta `git diff --check`.
+Tidak menjalankan `go build`, `go run`, `go test`, `go vet`, atau type-check penuh.
+
+Lihat [TODO.md](TODO.md) untuk status pekerjaan dan
+[MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md) untuk verifikasi pengguna.
+
+Referensi: [Gio Windows](https://gioui.org/doc/install/windows),
+[TopMost](https://pkg.go.dev/gioui.org@v0.10.2/app#TopMost),
+[formatter modem](http://192.168.100.1/js/lib.js).

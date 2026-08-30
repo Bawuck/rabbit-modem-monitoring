@@ -37,9 +37,9 @@ func (m ChartMetric) value(s model.Sample) model.Value[float64] {
 func SignalChart(gtx layout.Context, t *material.Theme, s model.Snapshot, metric ChartMetric) layout.Dimensions {
 	title, unitName, col := "RSRP", "dBm", Accent
 	if metric == ChartRSRQ {
-		title, unitName, col = "RSRQ", "dB", Blue
+		title, unitName, col = "RSRQ", "raw", Blue
 	} else if metric == ChartSINR {
-		title, unitName, col = "SINR", "dB", Green
+		title, unitName, col = "SINR", "raw", Green
 	}
 	if s.Stale {
 		title += " · stale"
@@ -59,7 +59,7 @@ func SignalChart(gtx layout.Context, t *material.Theme, s model.Snapshot, metric
 		low = math.Floor(low - padding)
 		high = math.Ceil(high + padding)
 	}
-	rangeText, timeText := "No samples", "Waiting for data"
+	rangeText, timeText := "No samples · "+unitName, "Waiting for data"
 	if hasValues {
 		rangeText = fmt.Sprintf("%.0f … %.0f %s", low, high, unitName)
 		timeText = s.History[0].At.Format("15:04:05") + " — " + s.History[len(s.History)-1].At.Format("15:04:05")

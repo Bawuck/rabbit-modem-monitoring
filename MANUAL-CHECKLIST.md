@@ -1,59 +1,68 @@
-# Checklist manual — belum dijalankan
+# Checklist manual — integrasi modem live
 
-Checklist ini disiapkan untuk sesi menjalankan aplikasi oleh pengguna.
-Tidak ada unit test, build, atau pengujian runtime selama implementasi.
+Belum dijalankan pada aplikasi hasil integrasi. Tidak membuat unit test atau
+menjalankan build/aplikasi dalam sesi implementasi. Checklist ini untuk pengguna
+saat menjalankan aplikasi; kasus respons khusus memerlukan lingkungan terkontrol,
+bukan perubahan konfigurasi atau gangguan sengaja pada modem produksi.
 
 ## Window dan DPI
 
-- [ ] Startup menampilkan satu widget dengan label Demo, awalnya Loading.
-- [ ] Pada scaling Windows 100%, area konten sekitar 300 × 380; title bar di luar area tersebut.
-- [ ] Pada scaling 125%, 150%, dan 200%, teks tetap terbaca dan tidak bertumpuk.
-- [ ] Widget tetap di atas window aplikasi biasa saat aplikasi lain mendapat fokus.
-- [ ] Widget dapat dipindah lewat title bar; klik area konten membuka Overview.
-- [ ] Dashboard berukuran awal sekitar 900 × 650 dp dan dapat diperbesar.
-- [ ] Klik widget berulang kali tidak membuat dashboard duplikat.
-- [ ] Klik cepat saat dashboard sedang dibuat tidak membuat window tambahan.
-- [ ] Dashboard yang diminimalkan dipulihkan lewat klik widget.
-- [ ] Menutup dashboard menyisakan widget; klik berikutnya membuka dashboard baru.
-- [ ] Menutup widget saat dashboard terbuka menutup keduanya dan mengakhiri proses.
-- [ ] Menutup widget saat dashboard diminimalkan atau sedang dibuat tetap mengakhiri proses.
-- [ ] Fokus keyboard/Enter/Space dapat membuka dashboard dan mengganti skenario.
-- [ ] Sidebar menu selain Overview tidak dapat diklik dan bertanda Coming soon.
+- [ ] Startup menampilkan satu widget Live; Loading menunggu hasil GET pertama.
+- [ ] Konten widget 300 × 380 dp; title bar native berada di luar area konten.
+- [ ] Scaling 100%, 125%, 150%, dan 200% tetap terbaca tanpa tumpang tindih.
+- [ ] Widget selalu di atas aplikasi biasa dan dapat dipindah melalui title bar.
+- [ ] Klik konten atau Enter/Space membuka dashboard 900 × 650 dp.
+- [ ] Klik cepat berulang tidak membuat dashboard duplikat.
+- [ ] Dashboard yang diminimalkan dipulihkan saat widget diklik.
+- [ ] Menutup dashboard menyisakan widget dan polling tetap berjalan.
+- [ ] Membuka kembali dashboard menampilkan snapshot/history yang sama.
+- [ ] Sidebar Live tetap terlihat saat Overview digulir.
+- [ ] Pada lebar minimum 760 dp, grafik tersusun vertikal tanpa tumpang tindih.
+- [ ] Signal, Cell, History, dan Settings tetap Coming soon dan nonaktif.
+- [ ] Tidak ada pemilih skenario, label Demo, score 0–100, atau label kualitas fixture.
 
-## Data dan chart
+## Data live dan unit
 
-- [ ] Setelah startup 2 detik, fixture pertama: score 82/GOOD, RSRP -84 dBm,
-      RSRQ -9 dB, SINR 21 dB, B3, PCI 153, 12.4/3.1 Mbps, ping 28 ms.
-- [ ] Widget dan Overview menampilkan nilai yang sama setelah kedua window repaint.
-- [ ] Urutan mock berulang; badge berubah antara LTE dan LTE-A.
-- [ ] Hanya Overview menambahkan RSSI, tanpa menghilangkan metrik widget lainnya.
-- [ ] Grafik RSRP, RSRQ, dan SINR terpisah, memiliki unit dan timestamp.
-- [ ] Sampel pertama berupa titik; garis muncul setelah ada sampel berikutnya.
-- [ ] Setelah lebih dari 1 menit, history tetap maksimal 30 sampel.
-- [ ] Mengubah ukuran dashboard atau melakukan scroll tidak mengubah nilai mock.
-- [ ] Label Demo tetap terlihat di sidebar saat Overview digulir ke bawah.
-- [ ] Pada lebar dashboard minimum 760 dp, pilihan skenario membungkus ke dua baris
-      dan grafik tersusun vertikal; konten bisa digulir tanpa menumpuk.
+- [ ] Band/PCI/network/bar cocok dengan respons modem pada waktu yang sama.
+- [ ] FDD_LTE/TDD_LTE tampil LTE; tidak otomatis diubah menjadi LTE-A.
+- [ ] Signal Strength menampilkan signalbar sebagai n/5 dengan lima segmen.
+- [ ] Bar 0 tetap valid; bar kosong, negatif, pecahan, atau >5 menjadi —.
+- [ ] RSRP dan RSSI memakai dBm; RSRQ dan SINR menampilkan nilai raw tanpa konversi.
+- [ ] Label raw terlihat pada kartu metrik dan panel grafik RSRQ/SINR.
+- [ ] Download/upload = bytes/detik ×8 ÷1.000.000, tampil tiga desimal Mbps.
+- [ ] Throughput nol tampil 0.000; kosong/null/tidak valid tampil —.
+- [ ] Trafik dilabeli aktivitas modem saat ini, bukan hasil speed test.
+- [ ] Ping selalu — dengan keterangan tidak tersedia; durasi GET tidak dipakai.
+- [ ] RSSI ditampilkan di Overview; seluruh metrik widget tetap tersedia.
+- [ ] Metrik khusus LTE kosong saat jaringan bukan LTE/LTE-A.
 
-## State
+## Polling dan error
 
-- [ ] Pilih Loading: semua pengukuran dan grafik kosong, tidak berubah Online otomatis.
-- [ ] Pilih No Signal: angka tampil `—`, bukan nol; status No Signal terlihat di kedua window.
-- [ ] Online → API Error: nilai tetap sama, score/grafik ditandai stale, timestamp sukses tidak berubah.
-- [ ] Online → Disconnected: kondisi stale sama; usia data terus bertambah.
-- [ ] Error/Disconnected → Online: pengukuran diperbarui dan history dimulai dari segmen baru.
-- [ ] Online → Loading/No Signal → Online juga memulai segmen grafik baru,
-      langsung memakai fixture berikutnya tanpa mengulang urutan dari awal.
-- [ ] Memilih ulang Online tidak mereset history atau menambah sampel di luar ticker.
-- [ ] Pada startup, buka dashboard dan pilih Loading sebelum 2 detik; lalu pilih API Error
-      dan Disconnected. Tanpa sampel sukses, tetap tampil `—` dan Waiting for data.
-- [ ] Online → Loading/No Signal → API Error: cache sukses terakhir muncul sebagai stale.
-- [ ] Demo API Error hanya tampilan simulasi; tidak menghubungi endpoint apa pun.
-- [ ] Selama state non-Online, jumlah sampel tidak bertambah; stale mempertahankan
-      grafik terakhir, sementara Loading/No Signal menyembunyikannya.
+- [ ] Poll pertama langsung; selanjutnya tiap 2 detik bila siklus sebelumnya selesai.
+- [ ] Dua endpoint diminta paralel; siklus lambat tidak menumpuk request.
+- [ ] Request yang macet dibatasi deadline siklus sekitar 5 detik.
+- [ ] UI, pemindahan window, dan scroll tetap responsif selama request berlangsung.
+- [ ] Snapshot dua window konsisten setelah masing-masing repaint.
+- [ ] Satu endpoint gagal: tidak ada campuran nilai baru dengan sebagian nilai lama.
+- [ ] JSON valid ber-Content-Type text/html tetap diterima.
+- [ ] HTML login, HTTP gagal/redirect, JSON rusak, {}, atau body >1 MiB menjadi API Error.
+- [ ] Status network/PPP wajib yang hilang, null, salah tipe, atau PPP tak dikenal menjadi API Error.
+- [ ] No service/limited service/network kosong menjadi No Signal, metrik dan chart kosong.
+- [ ] PPP belum terhubung dengan jaringan tersedia menjadi Disconnected.
+- [ ] Timeout/transport gagal menjadi Disconnected, lalu mencoba otomatis.
+- [ ] Online → API Error/Disconnected mempertahankan data, history, dan timestamp dengan stale.
+- [ ] Gagal sebelum Online pertama tetap — tanpa timestamp pengukuran palsu.
+- [ ] No Signal → API Error masih dapat menunjukkan cache Online terakhir sebagai stale.
+- [ ] Pemulihan menjadi Online menghilangkan stale dan memulai segmen history baru.
 
-## Batasan MVP
+## Grafik, shutdown, dan privasi
 
-- [ ] Tidak ada speed test, request jaringan aplikasi, database, system tray,
-      autostart, atau pengaturan yang tersimpan.
-- [ ] Saat aplikasi dibuka ulang, mock/history dimulai dari awal.
+- [ ] Grafik RSRP, RSRQ, SINR terpisah, memiliki unit serta timestamp awal/akhir.
+- [ ] Sampel pertama berupa titik; nilai hilang memutus garis, bukan menjadi nol.
+- [ ] History maksimal 30 sampel; state non-Online tidak menambahkan sampel.
+- [ ] Menutup widget saat request aktif membatalkan request dan mengakhiri proses.
+- [ ] Penutupan juga berhasil saat dashboard terbuka, diminimalkan, atau sedang dibuat.
+- [ ] Tidak ada request lanjutan setelah aplikasi keluar.
+- [ ] Tidak ada body mentah, ICCID, SSID, cookie, atau token dalam log/file.
+- [ ] Tidak ada request perubahan konfigurasi modem, database, tray, autostart, atau speed test.
+- [ ] Membuka ulang aplikasi memulai history baru tanpa data tersimpan.

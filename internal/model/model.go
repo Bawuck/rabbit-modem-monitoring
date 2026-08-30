@@ -3,27 +3,15 @@ package model
 
 import "time"
 
-type Scenario string
+type ConnectionState string
 
 const (
-	Loading      Scenario = "Loading"
-	Online       Scenario = "Online"
-	NoSignal     Scenario = "No Signal"
-	APIError     Scenario = "API Error"
-	Disconnected Scenario = "Disconnected"
+	Loading      ConnectionState = "Loading"
+	Online       ConnectionState = "Online"
+	NoSignal     ConnectionState = "No Signal"
+	APIError     ConnectionState = "API Error"
+	Disconnected ConnectionState = "Disconnected"
 )
-
-func Scenarios() []Scenario {
-	return []Scenario{Loading, Online, NoSignal, APIError, Disconnected}
-}
-
-func (s Scenario) Valid() bool {
-	switch s {
-	case Loading, Online, NoSignal, APIError, Disconnected:
-		return true
-	}
-	return false
-}
 
 // Value distinguishes unavailable measurements from valid zero values.
 type Value[T any] struct {
@@ -34,18 +22,17 @@ type Value[T any] struct {
 func Some[T any](v T) Value[T] { return Value[T]{Value: v, Valid: true} }
 
 type Reading struct {
-	Network  Value[string]
-	Score    Value[int]
-	Quality  string
-	RSRP     Value[float64]
-	RSRQ     Value[float64]
-	SINR     Value[float64]
-	RSSI     Value[float64]
-	Band     Value[string]
-	PCI      Value[int]
-	Download Value[float64]
-	Upload   Value[float64]
-	Ping     Value[float64]
+	Network    Value[string]
+	SignalBars Value[int]
+	RSRP       Value[float64]
+	RSRQ       Value[float64]
+	SINR       Value[float64]
+	RSSI       Value[float64]
+	Band       Value[string]
+	PCI        Value[int]
+	Download   Value[float64]
+	Upload     Value[float64]
+	Ping       Value[float64]
 }
 
 type Sample struct {
@@ -53,9 +40,19 @@ type Sample struct {
 	RSRP, RSRQ, SINR Value[float64]
 }
 
+// Update is one complete polling cycle. Only Online carries fresh measurements.
+// Message contains a safe explanation, never an HTTP body or device identifier.
+type Update struct {
+	State      ConnectionState
+	Reading    Reading
+	ReceivedAt time.Time
+	Message    string
+}
+
 // Snapshot is a detached view. Mutating its History cannot affect the store.
 type Snapshot struct {
-	State     Scenario
+	State     ConnectionState
+	Message   string
 	Reading   Reading
 	HasData   bool
 	Stale     bool
