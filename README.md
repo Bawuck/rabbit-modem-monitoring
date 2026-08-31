@@ -1,12 +1,11 @@
-# 4G Monitor
+# Rabbit Modem Monitoring
 
 Aplikasi desktop Windows dengan Go + Gio: widget always-on-top, satu dashboard
 Overview, dan data modem live dari `192.168.100.1`. Semua UI ditulis dalam Go;
 tidak menggunakan HTML, CSS, JavaScript, Electron, atau WebView.
 
-**Status: implementasi source, cross-build Windows amd64, dan `go vet` target
-Windows sudah berhasil. Aplikasi belum dijalankan pada Windows dan data modem
-live belum diverifikasi ulang karena container tidak dapat mengakses LAN modem.**
+**Status: form konfigurasi dan penyimpanan Windows DPAPI telah diimplementasikan.
+Perubahan terbaru belum dijalankan di GUI atau di-build/test; pemeriksaan terbatas pada source, formatting, dan diff.**
 
 ## Menjalankan
 
@@ -18,17 +17,59 @@ Jalankan sendiri dari PowerShell:
 
 ```powershell
 cd C:\Go\rabbit-monitoring
-go run ./cmd/4g-monitor
+go run .
 ```
 
 Untuk executable GUI tanpa console, gunakan opsi linker
-`go run -ldflags="-H windowsgui" ./cmd/4g-monitor`.
+`go run -ldflags="-H windowsgui" .`.
 Cross-build varian biasa dan `windowsgui` sudah diverifikasi; eksekusi serta UAT
 tetap harus dilakukan langsung pada Windows yang terhubung ke modem.
 
+## EXE portable dan startup Windows
+
+Aplikasi dapat dikemas sebagai satu EXE GUI tanpa installer atau Go di komputer tujuan.
+Konfigurasi tetap disimpan di LOCALAPPDATA, bukan di sebelah EXE. Pembuatan EXE terbaru
+belum selesai: build diblokir oleh instruksi larangan build/test dan memerlukan izin eksplisit.
+
+Toggle **Start on startup** tersedia di Pengaturan. Perubahan langsung diterapkan,
+tidak memerlukan Simpan & Hubungkan, dan tidak dibatalkan oleh tombol Batal form koneksi.
+Default nonaktif jika belum ada entri. Toggle mendaftarkan/menghapus hanya value
+`Rabbit Modem Monitoring` pada `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+Tidak perlu administrator. Entri berisi path EXE ber-quote, tanpa password atau parameter rahasia.
+
+Startup berarti saat pengguna login Windows, bukan service sebelum login atau auto-restart
+setelah aplikasi ditutup. Pengaturan Windows Startup Apps dapat menonaktifkan peluncuran ini.
+Jalankan EXE dari lokasi tetap sebelum mengaktifkan toggle; go run/debug executable sementara
+ditolak. Jika EXE dipindah/diubah namanya, aktifkan ulang toggle dari lokasi baru.
+Matikan toggle sebelum menghapus EXE. Tidak ada pemasangan otomatis saat aplikasi sekadar dibuka.
+
+## Koneksi modem
+
+Saat konfigurasi belum tersedia, dashboard membuka form Koneksi Modem otomatis.
+Form awal terisi host `http://192.168.100.1` dan password `admin` (tetap tersamarkan).
+Konfigurasi tersimpan tetap diutamakan. Sesuaikan bila perlu, lalu pilih
+**Simpan & Hubungkan**. Host tanpa skema memakai HTTP. IP/hostname dan port opsional
+didukung; path API, query, fragment, dan kredensial dalam URL ditolak.
+Password tersamarkan, dengan tombol tampil/sembunyikan. Password tidak di-trim.
+
+Host dan password DPAPI tersimpan di `%LOCALAPPDATA%\4G Monitor\connection.json`
+(format versi 1). Hanya ciphertext password disimpan; cookie hanya di memori.
+DPAPI memakai pengguna Windows saat ini. File rusak/tidak dapat didekripsi tidak
+ditimpa otomatis: form meminta pengisian ulang. File sementara berisi ciphertext,
+lalu diganti atomik. Gagal menyimpan mempertahankan koneksi sebelumnya.
+
+Tombol **Pengaturan** di header dashboard membuka kembali form, tanpa sidebar.
+**Batal** membuang perubahan tanpa menghentikan polling. Saat disimpan, worker lama
+dibatalkan dan ditunggu, snapshot/history direset, lalu client/cookie jar baru dibuat.
+Tidak perlu restart. Konfigurasi tetap disimpan meskipun modem offline/login ditolak.
+Startup berikutnya langsung memakai konfigurasi tersimpan; environment password tidak dipakai lagi.
+
+HTTP mengirim password tanpa enkripsi jaringan; Base64 bukan enkripsi. Gunakan LAN
+tepercaya. HTTPS memakai verifikasi sertifikat standar, tanpa opsi insecure.
+
 ## Window dan tampilan
 
-- Widget: konten tetap 300 × 380 dp, always-on-top, title bar native.
+- Widget: konten tetap 300 × 380 dp, always-on-top, header terintegrasi dengan area drag dan tombol close.
 - Dashboard: konten awal 900 × 650 dp, minimum 760 × 520 dp, dapat diperbesar
   dan digulir; grafik tersusun vertikal pada area konten yang lebih sempit.
 - Klik konten widget membuka dashboard; klik berikutnya memfokuskan/memulihkan
@@ -36,17 +77,22 @@ tetap harus dilakukan langsung pada Windows yang terhubung ke modem.
 - Menutup dashboard tidak menghentikan widget atau polling. Menutup widget
   membatalkan request aktif, menghentikan worker/ticker, dan menutup dashboard.
 - Kedua window berlabel Live. Tidak ada mode atau pemilih skenario Demo.
-- Signal, Cell, History, dan Settings tetap nonaktif dengan Coming soon.
+- Dashboard tanpa sidebar dan tanpa title bar bawaan Windows. Header menyatu dengan halaman,
+  tetap terlihat saat scroll/form terbuka, dengan Pengaturan, minimize, maximize/restore, dan close.
+  Drag area judul untuk memindahkan window; widget juga memakai header terintegrasi dengan minimize, maximize/restore, dan close.
 - Setiap window memiliki shaper, state interaksi, dan event loop sendiri.
   Window mengambil satu salinan snapshot per frame; repaint tidak harus serentak.
 
 ## Endpoint dan pemetaan
 
-Dua URL GET lengkap hardcoded sebagai `SignalURL` dan `StatusURL` di
-[internal/modem/client.go](internal/modem/client.go). Keduanya mempertahankan
-host, path `/goform/goform_get_cmd_process`, dan seluruh query dari pengguna.
-Tidak ada pengaturan URL, autentikasi otomatis, cookie, atau proxy sistem;
-redirect tidak diikuti. Tidak ada request untuk mengubah konfigurasi modem.
+URL GET dibangun dari host konfigurasi di internal/modem/client.go menggunakan
+path `/goform/goform_get_cmd_process`, `multi_data=1`, dan satu query `cmd` gabungan.
+Sebanyak 20 field termasuk status sesi `loginfo` diminta: jaringan, sinyal, band/PCI, PPP, bar, throughput, serta detail operator dan counter modem.
+Flag SMS/STS tetap 0. POST LOGIN otomatis memakai password dari form/profil DPAPI,
+diubah menjadi Base64 lalu form-urlencoded sesuai protokol modem. Origin dan Referer mengikuti host.
+Cookie disimpan hanya di memori jika modem mengirimkannya. Tidak ada proxy sistem,
+redirect, logout, atau perubahan konfigurasi modem. HTTP/Base64 tidak mengenkripsi password;
+gunakan hanya di LAN tepercaya. Jangan commit password atau menuliskannya ke log.
 
 | Tampilan | Field | Perlakuan |
 | --- | --- | --- |
@@ -56,7 +102,10 @@ redirect tidak diikuti. Tidak ada request untuk mengubah konfigurasi modem.
 | RSRQ / SINR | nv_rsrq / nv_sinr | Raw, termasuk unit sumbu grafik; konversi dB belum terverifikasi |
 | Band / PCI | lte_band / nv_pci | Band numerik menjadi Bn; PCI LTE 0–503 |
 | Download / Upload | realtime_rx_thrpt / realtime_tx_thrpt | Bytes/detik × 8 ÷ 1.000.000; Mbps dengan tiga desimal |
-| Ping | Tidak disediakan | Selalu —, dengan keterangan No API data |
+| Operator / Roaming | network_provider / simcard_roam | Teks modem, kosong menjadi — |
+| Counter perangkat | sta_count / m_sta_count | Ditampilkan terpisah; pembagian belum terverifikasi |
+| Total download / upload | realtime_rx_bytes / realtime_tx_bytes | GB desimal dan bytes; periode reset mengikuti modem |
+| Counter durasi | realtime_time | Raw; satuan belum terverifikasi, tidak dihitung maju saat stale |
 | Updated | Waktu penerimaan siklus sukses | Dibekukan selama data stale |
 
 Trafik adalah aktivitas modem saat itu, bukan speed test. Durasi GET bukan ping.
@@ -67,16 +116,24 @@ Body respons hanya dibaca sementara untuk decoding, maksimal 1 MiB per endpoint.
 
 ## Polling dan status
 
-Poll pertama langsung saat startup, lalu setiap 2 detik. Satu worker menjalankan
-dua GET paralel dengan deadline siklus 5 detik. Tick selama siklus masih berjalan
+Poll pertama langsung setelah konfigurasi tersedia, lalu setiap 2 detik. Satu worker menjalankan
+satu GET dengan timeout request 5 detik. Tick selama siklus masih berjalan
 dilewati; tidak ada antrean polling. HTTP tidak berjalan pada event loop UI.
 
-Kedua respons harus berhasil sebelum satu snapshot dipublikasikan. Data radio
-berasal dari endpoint pertama; status PPP/bar/throughput dari endpoint kedua.
-Kedua GET bukan transaksi atomik di modem, tetapi publikasi di aplikasi atomik.
+Data radio dan status PPP/bar/throughput didekode dari satu respons JSON.
+Respons harus berhasil dan status wajib valid sebelum snapshot dipublikasikan.
+Publikasi di aplikasi tetap atomik. Jika `loginfo` bukan `ok` atau GET mendapat
+401/403/redirect, lakukan satu POST LOGIN lalu satu GET ulang. Jalur pemulihan
+dibatasi total 15 detik; polling normal tetap satu GET. Nilai sinyal kosong saja
+tidak memicu login selama sesi `ok`. Respons tanpa sesi tidak menggantikan cache;
+data sebelumnya menjadi stale jika pemulihan gagal.
+Login dibatasi satu percobaan per 60 detik. Hasil login nonzero atau 401/403
+menghentikan percobaan login otomatis. Perbaiki konfigurasi melalui Pengaturan lalu
+Simpan & Hubungkan untuk membuat client baru dan mencoba lagi tanpa restart.
 
 | Status | Kondisi | Tampilan |
 | --- | --- | --- |
+| Koneksi belum diatur | Belum ada profil valid | Tidak melakukan polling |
 | Loading | Belum ada hasil siklus pertama | Placeholder |
 | Online | PPP terhubung dan jaringan tersedia | Pengukuran live dan sampel baru |
 | No Signal | Jaringan kosong/no service/limited service | Pengukuran dan grafik disembunyikan |
@@ -102,12 +159,23 @@ segmen baru; tidak menghubungkan garis melewati outage.
 - `internal/model`: tipe data, nilai opsional, status, update/snapshot.
 - `internal/windows`: lifecycle dua window dan pembatalan worker.
 - `internal/components`, `internal/pages`: UI Gio dan grafik.
-- `cmd/4g-monitor`: entry point.
+- `main.go`: entry point di root project.
 
-Tidak ada database, persistence, system tray, autostart, speed test, rumus score,
+Hanya profil koneksi disimpan; history dan cookie tidak dipersist.
+Tidak ada database, system tray, speed test, rumus score,
 atau kontrol modem. HTTP modem tidak terenkripsi; gunakan hanya pada LAN tepercaya.
 
 ## Verifikasi dan pekerjaan lanjutan
+
+Verifikasi session: POST LOGIN yang diberikan pengguna menghasilkan HTTP 200/result 0.
+GET berikutnya menghasilkan loginfo=ok dan RSSI/RSRP -63; tidak ada cookie yang
+dikirim pada percobaan ini. Alur Go otomatis dan expiry belum diuji runtime;
+tidak ada build/test yang dijalankan untuk perubahan ini.
+
+Perubahan satu request: GET URL gabungan dari Windows berhasil HTTP 200 dengan seluruh
+12 field, termasuk RSSI/RSRP -63, PPP connected, dan throughput RX/TX.
+Perubahan ini diperiksa dengan gofmt dan git diff --check, tanpa build/test atau
+menjalankan GUI. Catatan build di bawah merupakan verifikasi versi sebelumnya.
 
 Pada sesi perencanaan 31 Agustus 2026, GET kedua endpoint memperoleh HTTP 200
 tanpa cookie/login tambahan, dengan JSON ber-Content-Type text/html.

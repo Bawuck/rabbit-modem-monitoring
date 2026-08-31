@@ -13,15 +13,17 @@ import (
 	"gioui.org/unit"
 
 	"example.com/4g-monitor/internal/components"
-	"example.com/4g-monitor/internal/modem"
+	"example.com/4g-monitor/internal/connection"
+	"example.com/4g-monitor/internal/model"
 	"example.com/4g-monitor/internal/monitor"
 	"example.com/4g-monitor/internal/pages"
 )
 
 type windowHandle struct {
-	window *app.Window
-	raise  chan struct{}
-	close  chan struct{}
+	window   *app.Window
+	raise    chan struct{}
+	settings chan struct{}
+	close    chan struct{}
 }
 
 type closedWindow struct {
@@ -31,9 +33,10 @@ type closedWindow struct {
 
 func newHandle() *windowHandle {
 	return &windowHandle{
-		window: new(app.Window),
-		raise:  make(chan struct{}, 1),
-		close:  make(chan struct{}),
+		window:   new(app.Window),
+		raise:    make(chan struct{}, 1),
+		settings: make(chan struct{}, 1),
+		close:    make(chan struct{}),
 	}
 }
 
@@ -41,17 +44,20 @@ func newHandle() *windowHandle {
 // main must call app.Main on the main goroutine.
 func Run() error {
 	store := monitor.NewStore()
+	store.Reset(model.Unconfigured, "Koneksi belum diatur", "")
+	controller := connection.New()
 	ctx, cancel := context.WithCancel(context.Background())
 	pollDone := make(chan struct{})
 	go func() {
 		defer close(pollDone)
-		modem.NewClient().Run(ctx, store.Apply)
+		controller.Run(ctx, store)
 	}()
 	defer func() {
 		cancel()
 		<-pollDone // No store/window lock is held while joining the worker.
 	}()
 	openDashboard := make(chan struct{}, 1)
+	openSettings := make(chan struct{}, 1)
 	closed := make(chan closedWindow, 2)
 	widgetWindow := newHandle()
 	var dashboard *windowHandle
@@ -61,15 +67,37 @@ func Run() error {
 		default: // Coalesce rapid clicks; there can only be one dashboard.
 		}
 	}
-	go widgetWindow.loop(true, store, requestOpen, closed)
+	requestSettings := func() {
+		select {
+		case openSettings <- struct{}{}:
+		default:
+		}
+	}
+	go widgetWindow.loop(true, store, controller, requestOpen, requestSettings, closed)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	closing := false
 	var widgetErr error
+	initialConfigHandled := false
 
 	// Only this coordinator owns the window registry and closes command channels.
 	for {
 		select {
+		case <-controller.Changed():
+			if closing {
+				continue
+			}
+			view := controller.Snapshot()
+			if !initialConfigHandled && !view.Busy {
+				initialConfigHandled = true
+				if !view.Ready {
+					requestOpen()
+				}
+			}
+			widgetWindow.window.Invalidate()
+			if dashboard != nil {
+				dashboard.window.Invalidate()
+			}
 		case <-ticker.C:
 			if closing {
 				continue
@@ -93,7 +121,7 @@ func Run() error {
 			}
 			if dashboard == nil {
 				dashboard = newHandle()
-				go dashboard.loop(false, store, nil, closed)
+				go dashboard.loop(false, store, controller, nil, nil, closed)
 			} else {
 				select {
 				case dashboard.raise <- struct{}{}:
@@ -101,6 +129,25 @@ func Run() error {
 				}
 				dashboard.window.Invalidate()
 			}
+		case <-openSettings:
+			if closing {
+				continue
+			}
+			if dashboard == nil {
+				dashboard = newHandle()
+				go dashboard.loop(false, store, controller, nil, nil, closed)
+			} else {
+				select {
+				case dashboard.raise <- struct{}{}:
+				default:
+				}
+				dashboard.window.Invalidate()
+			}
+			select {
+			case dashboard.settings <- struct{}{}:
+			default:
+			}
+			dashboard.window.Invalidate()
 		case result := <-closed:
 			if result.handle == widgetWindow {
 				closing = true
@@ -124,23 +171,30 @@ func Run() error {
 	}
 }
 
-func (h *windowHandle) loop(isWidget bool, store *monitor.Store, open func(), closed chan<- closedWindow) {
+func (h *windowHandle) loop(isWidget bool, store *monitor.Store, controller *connection.Controller, open func(), openSettings func(), closed chan<- closedWindow) {
 	var err error
 	defer func() { closed <- closedWindow{handle: h, err: err} }()
 	if isWidget {
-		h.window.Option(app.Title("4G Monitor · Live"), app.Size(unit.Dp(300), unit.Dp(380)),
+		h.window.Option(app.Decorated(false), app.Title("Rabbit Modem Monitoring · Live"), app.Size(unit.Dp(300), unit.Dp(380)),
 			app.MinSize(unit.Dp(300), unit.Dp(380)), app.MaxSize(unit.Dp(300), unit.Dp(380)), app.TopMost(true))
 	} else {
-		h.window.Option(app.Title("4G Monitor · Overview · Live"), app.Size(unit.Dp(900), unit.Dp(650)),
+		h.window.Option(app.Decorated(false), app.Title("Rabbit Modem Monitoring · Overview · Live"), app.Size(unit.Dp(900), unit.Dp(650)),
 			app.MinSize(unit.Dp(760), unit.Dp(520)))
 	}
 	theme := components.NewTheme()
-	widgetPage := pages.Widget{Open: open}
+	widgetPage := pages.Widget{Open: open, OpenSettings: openSettings}
 	overview := pages.NewOverview()
 	var ops op.Ops
 	closing := false
 	for {
 		e := h.window.Event()
+		if config, ok := e.(app.ConfigEvent); ok {
+			if isWidget {
+				widgetPage.Decorations.Maximized = config.Config.Mode == app.Maximized
+			} else {
+				overview.Decorations.Maximized = config.Config.Mode == app.Maximized
+			}
+		}
 		if destroyed, ok := e.(app.DestroyEvent); ok {
 			err = destroyed.Err
 			return
@@ -160,15 +214,28 @@ func (h *windowHandle) loop(isWidget bool, store *monitor.Store, open func(), cl
 			}
 		default:
 		}
+		if !isWidget && !closing {
+			select {
+			case <-h.settings:
+				overview.RequestSettings()
+			default:
+			}
+		}
 		if frame, ok := e.(app.FrameEvent); ok {
 			gtx := app.NewContext(&ops, frame)
 			paint.Fill(gtx.Ops, components.Background)
 			// Both pages use one detached, coherent snapshot per frame.
 			snapshot := store.Snapshot()
 			if isWidget {
+				if actions := widgetPage.Decorations.Update(gtx); actions != 0 {
+					h.window.Perform(actions)
+				}
 				widgetPage.Layout(gtx, theme, snapshot)
 			} else {
-				overview.Layout(gtx, theme, snapshot)
+				if actions := overview.Decorations.Update(gtx); actions != 0 {
+					h.window.Perform(actions)
+				}
+				overview.Layout(gtx, theme, snapshot, controller)
 			}
 			frame.Frame(gtx.Ops)
 		}

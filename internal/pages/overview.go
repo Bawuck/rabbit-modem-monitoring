@@ -1,17 +1,81 @@
 package pages
 
 import (
+	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
 	"example.com/4g-monitor/internal/components"
+	"example.com/4g-monitor/internal/connection"
 	"example.com/4g-monitor/internal/model"
 )
 
 type Overview struct {
-	list widget.List
+	Decorations       widget.Decorations
+	list              widget.List
+	settings          Settings
+	configure         widget.Clickable
+	initialized       bool
+	settingsRequested bool
+}
+
+// RequestSettings is called only by this dashboard's window event loop.
+func (p *Overview) RequestSettings() { p.settingsRequested = true }
+
+// Layout keeps the custom title bar visible above both dashboard and settings.
+func (p *Overview) Layout(gtx layout.Context, t *material.Theme, s model.Snapshot, controller *connection.Controller) layout.Dimensions {
+	// Clickable.Layout consumes pending clicks, so handle navigation before
+	// rendering the header button (not later in layoutContent).
+	view := controller.Snapshot()
+	if p.settingsRequested && !view.Busy {
+		p.settingsRequested = false
+		if !p.settings.open {
+			p.settings.Open(view)
+		}
+	}
+	if !p.initialized && !view.Busy {
+		p.initialized = true
+		if !view.Ready {
+			p.settings.Open(view)
+		}
+	}
+	for p.configure.Clicked(gtx) {
+		if !view.Busy && !p.settings.open {
+			p.settings.Open(view)
+		}
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: 20, Right: 8, Top: 8, Bottom: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						return p.Decorations.LayoutMove(gtx, func(gtx layout.Context) layout.Dimensions {
+							return layout.Inset{Top: 8, Bottom: 8, Right: 20}.Layout(gtx, components.Label(t, 18, "Rabbit Modem Monitoring", components.Foreground, true))
+						})
+					}),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						if controller.Snapshot().Busy || p.settings.open {
+							gtx = gtx.Disabled()
+						}
+						return material.Button(t, &p.configure, "Pengaturan").Layout(gtx)
+					}),
+					layout.Rigid(layout.Spacer{Width: 12}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						// Gio supplies vector controls and native action hit regions.
+						gtx.Constraints.Min.X = gtx.Dp(140)
+						gtx.Constraints.Max.X = gtx.Dp(140)
+						style := material.Decorations(t, &p.Decorations,
+							system.ActionMinimize|system.ActionMaximize|system.ActionClose, "")
+						style.Background, style.Foreground = components.Background, components.Foreground
+						return style.Layout(gtx)
+					}),
+				)
+			})
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return p.layoutContent(gtx, t, s, controller) }),
+	)
 }
 
 func NewOverview() *Overview {
@@ -20,89 +84,57 @@ func NewOverview() *Overview {
 	}
 }
 
-func (p *Overview) Layout(gtx layout.Context, t *material.Theme, s model.Snapshot) layout.Dimensions {
+func (p *Overview) layoutContent(gtx layout.Context, t *material.Theme, s model.Snapshot, controller *connection.Controller) layout.Dimensions {
+	view := controller.Snapshot()
+	if p.settings.open {
+		dimensions := p.settings.Layout(gtx, t, controller, view)
+		if p.settings.open {
+			return dimensions
+		}
+	}
+	host := s.Host
+	if host == "" {
+		host = "Koneksi belum diatur"
+	}
 	return layout.UniformInset(20).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Min.X = gtx.Dp(136)
-				gtx.Constraints.Max.X = gtx.Dp(136)
-				return p.sidebar(gtx, t)
-			}),
-			layout.Rigid(layout.Spacer{Width: 20}.Layout),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				rows := []layout.Widget{
-					func(gtx layout.Context) layout.Dimensions {
-						return components.Column(gtx, 6,
-							func(gtx layout.Context) layout.Dimensions { return components.Header(gtx, t, "Overview") },
-							components.Label(t, 12, "Your connection, at a glance.", components.Muted, false),
-						)
-					},
-					func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions { return components.StatusBadge(gtx, t, s) }),
-							layout.Rigid(layout.Spacer{Width: 10}.Layout),
-							layout.Flexed(1, components.Label(t, 11, components.StateMessage(s), components.Muted, false)),
-						)
-					},
-					func(gtx layout.Context) layout.Dimensions {
-						return components.Row(gtx, 12,
-							func(gtx layout.Context) layout.Dimensions {
-								return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.SignalStrength(gtx, t, s, false) })
-							},
-							func(gtx layout.Context) layout.Dimensions {
-								return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.NetworkInfo(gtx, t, s.Reading, false) })
-							},
-						)
-					},
-					func(gtx layout.Context) layout.Dimensions { return p.metrics(gtx, t, s) },
-					func(gtx layout.Context) layout.Dimensions {
-						return components.Card(gtx, func(gtx layout.Context) layout.Dimensions {
-							return components.Column(gtx, 8,
-								components.Label(t, 11, "CURRENT MODEM TRAFFIC · NOT A SPEED TEST", components.Muted, true),
-								func(gtx layout.Context) layout.Dimensions {
-									return components.ConnectionStats(gtx, t, s.Reading, false)
-								},
-							)
-						})
-					},
-					func(gtx layout.Context) layout.Dimensions { return p.charts(gtx, t, s) },
-					components.Label(t, 11, components.UpdateText(s, gtx.Now), components.Muted, false),
-					components.Label(t, 11, "192.168.100.1 · RSRQ/SINR units unverified: raw values shown. Ping is not provided by these endpoints.", components.Muted, false),
-				}
-				return material.List(t, &p.list).Layout(gtx, len(rows), func(gtx layout.Context, index int) layout.Dimensions {
-					return (layout.Inset{Bottom: 12, Right: 8}).Layout(gtx, rows[index])
-				})
-			}),
-		)
-	})
-}
-
-func (p *Overview) sidebar(gtx layout.Context, t *material.Theme) layout.Dimensions {
-	items := []layout.Widget{
-		components.Label(t, 18, "4G Monitor", components.Foreground, true),
-		components.Label(t, 10, "CONNECTION MONITOR", components.Muted, false),
-		func(gtx layout.Context) layout.Dimensions {
-			return layout.W.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return components.Badge(gtx, t, "Live", components.Accent)
-			})
-		},
-		layout.Spacer{Height: 16}.Layout,
-		func(gtx layout.Context) layout.Dimensions {
-			return components.Card(gtx, components.Label(t, 13, "Overview", components.Accent, true))
-		},
-	}
-	for _, name := range []string{"Signal", "Cell", "History", "Settings"} {
-		items = append(items, func(gtx layout.Context) layout.Dimensions {
-			// No Clickable is registered: these are deliberately unavailable pages.
-			return (layout.Inset{Left: 12, Top: 7, Bottom: 7}).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return components.Column(gtx, 3,
-					components.Label(t, 13, name, components.Muted, false),
-					components.Label(t, 10, "Coming soon", components.Muted, false),
+		rows := []layout.Widget{
+			func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return components.StatusBadge(gtx, t, s) }),
+					layout.Rigid(layout.Spacer{Width: 10}.Layout),
+					layout.Flexed(1, components.Label(t, 11, components.StateMessage(s), components.Muted, false)),
 				)
-			})
+			},
+			func(gtx layout.Context) layout.Dimensions {
+				return components.Row(gtx, 12,
+					func(gtx layout.Context) layout.Dimensions {
+						return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.SignalStrength(gtx, t, s, false) })
+					},
+					func(gtx layout.Context) layout.Dimensions {
+						return components.Card(gtx, func(gtx layout.Context) layout.Dimensions { return components.NetworkInfo(gtx, t, s.Reading, false) })
+					},
+				)
+			},
+			func(gtx layout.Context) layout.Dimensions { return p.metrics(gtx, t, s) },
+			func(gtx layout.Context) layout.Dimensions {
+				return components.Card(gtx, func(gtx layout.Context) layout.Dimensions {
+					return components.Column(gtx, 8,
+						components.Label(t, 11, "CURRENT MODEM TRAFFIC · NOT A SPEED TEST", components.Muted, true),
+						func(gtx layout.Context) layout.Dimensions {
+							return components.ConnectionStats(gtx, t, s.Reading, false)
+						},
+					)
+				})
+			},
+			func(gtx layout.Context) layout.Dimensions { return components.ModemDetails(gtx, t, s) },
+			func(gtx layout.Context) layout.Dimensions { return p.charts(gtx, t, s) },
+			components.Label(t, 11, components.UpdateText(s, gtx.Now), components.Muted, false),
+			components.Label(t, 11, host+" · RSRQ/SINR units unverified: raw values shown.", components.Muted, false),
+		}
+		return material.List(t, &p.list).Layout(gtx, len(rows), func(gtx layout.Context, index int) layout.Dimensions {
+			return (layout.Inset{Bottom: 12, Right: 8}).Layout(gtx, rows[index])
 		})
-	}
-	return components.Column(gtx, 10, items...)
+	})
 }
 
 func (p *Overview) metrics(gtx layout.Context, t *material.Theme, s model.Snapshot) layout.Dimensions {

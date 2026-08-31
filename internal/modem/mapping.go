@@ -41,22 +41,59 @@ func (s *scalar) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type signalResponse struct {
-	Network    scalar `json:"network_type"`
-	SubNetwork scalar `json:"sub_network_type"`
-	RSSI       scalar `json:"rssi"`
-	RSRP       scalar `json:"lte_rsrp"`
-	RSRQ       scalar `json:"nv_rsrq"`
-	SINR       scalar `json:"nv_sinr"`
-	Band       scalar `json:"lte_band"`
-	PCI        scalar `json:"nv_pci"`
+type monitorResponse struct {
+	LoginInfo         scalar `json:"loginfo"`
+	Operator          scalar `json:"network_provider"`
+	Roaming           scalar `json:"simcard_roam"`
+	StationCount      scalar `json:"sta_count"`
+	MultiStationCount scalar `json:"m_sta_count"`
+	TotalDownload     scalar `json:"realtime_rx_bytes"`
+	TotalUpload       scalar `json:"realtime_tx_bytes"`
+	ConnectionTime    scalar `json:"realtime_time"`
+	Network           scalar `json:"network_type"`
+	SubNetwork        scalar `json:"sub_network_type"`
+	RSSI              scalar `json:"rssi"`
+	RSRP              scalar `json:"lte_rsrp"`
+	RSRQ              scalar `json:"nv_rsrq"`
+	SINR              scalar `json:"nv_sinr"`
+	Band              scalar `json:"lte_band"`
+	PCI               scalar `json:"nv_pci"`
+	PPP               scalar `json:"ppp_status"`
+	Bars              scalar `json:"signalbar"`
+	Download          scalar `json:"realtime_rx_thrpt"`
+	Upload            scalar `json:"realtime_tx_thrpt"`
 }
 
-type statusResponse struct {
-	PPP      scalar `json:"ppp_status"`
-	Bars     scalar `json:"signalbar"`
-	Download scalar `json:"realtime_rx_thrpt"`
-	Upload   scalar `json:"realtime_tx_thrpt"`
+func counter(s scalar) model.Value[uint64] {
+	if !s.valid || s.text == "" {
+		return model.Value[uint64]{}
+	}
+	n, err := strconv.ParseUint(s.text, 10, 64)
+	if err != nil {
+		return model.Value[uint64]{}
+	}
+	return model.Some(n)
+}
+
+func optionalText(s scalar) model.Value[string] {
+	if !s.valid || !s.isString || s.text == "" {
+		return model.Value[string]{}
+	}
+	// Bound device-provided labels and remove control characters before display.
+	text := []rune(strings.Map(func(r rune) rune {
+		if r < 32 || (r >= 127 && r <= 159) {
+			return -1
+		}
+		return r
+	}, s.text))
+	if len(text) > 80 {
+		text = text[:80]
+	}
+	value := strings.TrimSpace(string(text))
+	if value == "" {
+		return model.Value[string]{}
+	}
+	return model.Some(value)
 }
 
 func number(s scalar) model.Value[float64] {
@@ -115,32 +152,35 @@ func networkName(network, subNetwork string) string {
 	return network
 }
 
-func mapResponses(radio signalResponse, status statusResponse, at time.Time) model.Update {
-	if !radio.Network.valid || !radio.Network.isString || !status.PPP.valid || !status.PPP.isString || status.PPP.text == "" {
+func mapResponse(response monitorResponse, at time.Time) model.Update {
+	if !response.Network.valid || !response.Network.isString || !response.PPP.valid || !response.PPP.isString || response.PPP.text == "" {
 		return model.Update{State: model.APIError, Message: "Required network/PPP status is missing or invalid"}
 	}
-	ppp := strings.ToLower(status.PPP.text)
+	ppp := strings.ToLower(response.PPP.text)
 	switch ppp {
 	case "ppp_connected", "ppp_disconnected", "ppp_connecting", "ppp_disconnecting":
 	default:
 		return model.Update{State: model.APIError, Message: "Unrecognized PPP status from modem"}
 	}
-	if unavailableNetwork(radio.Network.text) || (radio.SubNetwork.valid && radio.SubNetwork.text != "" && unavailableNetwork(radio.SubNetwork.text)) {
+	if unavailableNetwork(response.Network.text) || (response.SubNetwork.valid && response.SubNetwork.text != "" && unavailableNetwork(response.SubNetwork.text)) {
 		return model.Update{State: model.NoSignal, Message: "No service or limited service · measurements unavailable"}
 	}
 	if ppp != "ppp_connected" {
 		return model.Update{State: model.Disconnected, Message: "Modem reachable · mobile data is not connected"}
 	}
-	network := networkName(radio.Network.text, radio.SubNetwork.text)
+	network := networkName(response.Network.text, response.SubNetwork.text)
 	reading := model.Reading{
-		Network: model.Some(network), SignalBars: integer(status.Bars, 5),
-		RSSI: number(radio.RSSI), Download: mbps(status.Download), Upload: mbps(status.Upload),
-		// Ping deliberately remains unavailable; HTTP duration is not network ping.
+		Operator: optionalText(response.Operator), Roaming: optionalText(response.Roaming),
+		StationCount: counter(response.StationCount), MultiStationCount: counter(response.MultiStationCount),
+		TotalDownload: counter(response.TotalDownload), TotalUpload: counter(response.TotalUpload),
+		ConnectionTime: counter(response.ConnectionTime),
+		Network:        model.Some(network), SignalBars: integer(response.Bars, 5),
+		RSSI: number(response.RSSI), Download: mbps(response.Download), Upload: mbps(response.Upload),
 	}
 	if network == "LTE" || network == "LTE-A" {
-		reading.RSRP, reading.RSRQ, reading.SINR = number(radio.RSRP), number(radio.RSRQ), number(radio.SINR)
-		reading.PCI = integer(radio.PCI, 503)
-		band := radio.Band
+		reading.RSRP, reading.RSRQ, reading.SINR = number(response.RSRP), number(response.RSRQ), number(response.SINR)
+		reading.PCI = integer(response.PCI, 503)
+		band := response.Band
 		band.text = strings.TrimPrefix(strings.ToUpper(band.text), "B")
 		if value := integer(band, 256); value.Valid && value.Value > 0 {
 			reading.Band = model.Some("B" + strconv.Itoa(value.Value))

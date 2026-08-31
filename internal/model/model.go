@@ -6,6 +6,7 @@ import "time"
 type ConnectionState string
 
 const (
+	Unconfigured ConnectionState = "Koneksi belum diatur"
 	Loading      ConnectionState = "Loading"
 	Online       ConnectionState = "Online"
 	NoSignal     ConnectionState = "No Signal"
@@ -22,17 +23,23 @@ type Value[T any] struct {
 func Some[T any](v T) Value[T] { return Value[T]{Value: v, Valid: true} }
 
 type Reading struct {
-	Network    Value[string]
-	SignalBars Value[int]
-	RSRP       Value[float64]
-	RSRQ       Value[float64]
-	SINR       Value[float64]
-	RSSI       Value[float64]
-	Band       Value[string]
-	PCI        Value[int]
-	Download   Value[float64]
-	Upload     Value[float64]
-	Ping       Value[float64]
+	Operator          Value[string]
+	Roaming           Value[string]
+	StationCount      Value[uint64]
+	MultiStationCount Value[uint64]
+	TotalDownload     Value[uint64]
+	TotalUpload       Value[uint64]
+	ConnectionTime    Value[uint64]
+	Network           Value[string]
+	SignalBars        Value[int]
+	RSRP              Value[float64]
+	RSRQ              Value[float64]
+	SINR              Value[float64]
+	RSSI              Value[float64]
+	Band              Value[string]
+	PCI               Value[int]
+	Download          Value[float64]
+	Upload            Value[float64]
 }
 
 type Sample struct {
@@ -51,6 +58,7 @@ type Update struct {
 
 // Snapshot is a detached view. Mutating its History cannot affect the store.
 type Snapshot struct {
+	Host      string
 	State     ConnectionState
 	Message   string
 	Reading   Reading

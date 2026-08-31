@@ -11,6 +11,7 @@ import (
 const HistoryLimit = 30
 
 type Store struct {
+	host    string
 	mu      sync.RWMutex
 	state   model.ConnectionState
 	message string
@@ -26,6 +27,22 @@ func NewStore() *Store {
 }
 
 func (s *Store) Changed() <-chan struct{} { return s.changed }
+
+// Reset is called only after the old polling worker has joined.
+func (s *Store) Reset(state model.ConnectionState, message, host string) {
+	s.mu.Lock()
+	s.host = host
+	s.state, s.message = state, message
+	s.last = model.Reading{}
+	s.hasData = false
+	s.updated = time.Time{}
+	s.history = nil
+	s.mu.Unlock()
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
+}
 
 // Apply publishes a whole cycle; failed cycles cannot replace any cached field.
 func (s *Store) Apply(update model.Update) {
@@ -58,7 +75,7 @@ func (s *Store) Apply(update model.Update) {
 func (s *Store) Snapshot() model.Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	view := model.Snapshot{State: s.state, Message: s.message}
+	view := model.Snapshot{Host: s.host, State: s.state, Message: s.message}
 	if s.state == model.Loading || s.state == model.NoSignal || !s.hasData {
 		return view
 	}

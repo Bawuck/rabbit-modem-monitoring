@@ -8,19 +8,31 @@ yang dapat mengakses modem. Tidak menambahkan unit test.
 
 ## Selesai
 
+- [x] Toggle Start on startup per-user HKCU Run, perubahan langsung, tanpa restart polling.
+- [ ] Buat EXE portable setelah izin build eksplisit; auto-review menolak build karena larangan build/test.
+- [ ] Verifikasi runtime toggle dan login Windows; registry startup belum diubah pada sesi implementasi.
+
+- [x] Form Koneksi Modem, host tervalidasi, password masked, tombol Pengaturan tanpa sidebar.
+- [x] Profil versi 1 dengan DPAPI current-user dan penggantian file atomik; gagal simpan mempertahankan koneksi.
+- [x] Pergantian worker serial, reset snapshot/history, cookie jar baru, tanpa restart.
+- [ ] UAT form, DPAPI save/load, pergantian koneksi, dan shutdown; tanpa build/test pada implementasi ini.
+
+- [x] Card detail modem: operator, roaming, counter perangkat terpisah, total RX/TX, dan durasi raw; satu GET 20 field.
+- [ ] Verifikasi satuan realtime_time dan pembagian sta_count/m_sta_count sebelum memberi label durasi atau jumlah perangkat gabungan.
+
 - [x] GET kedua endpoint saat perencanaan: HTTP 200, JSON dengan Content-Type text/html.
-- [x] Hardcode kedua URL lengkap pada internal/modem/client.go.
-- [x] Client GET tanpa proxy/redirect/cookie; body dibatasi 1 MiB per endpoint.
-- [x] Poll pertama langsung, interval 2 detik, dua GET paralel, timeout siklus 5 detik.
+- [x] Satu URL monitoring dari konfigurasi dengan query gabungan 20 field; GET live berhasil HTTP 200.
+- [x] Client tanpa proxy/redirect; cookie jar in-memory untuk login; body dibatasi 1 MiB per endpoint.
+- [x] Poll pertama langsung, interval 2 detik, satu GET gabungan, timeout request 5 detik (pemulihan login maksimal 15 detik).
 - [x] Lewati tick saat request aktif; batalkan dan tunggu worker saat widget ditutup.
 - [x] Store snapshot bersama, publikasi satu siklus utuh, history maksimal 30 sampel.
 - [x] Penanganan Loading, Online, No Signal, Disconnected, API Error, dan stale.
 - [x] Parsing angka/string, nilai opsional, placeholder —, dan nol yang tetap valid.
 - [x] Signal Strength memakai bar modem 0–5; hapus score dan label kualitas fixture.
 - [x] RSRQ/SINR diberi label raw pada metrik/grafik; throughput tiga desimal Mbps.
-- [x] Ping tetap —; tidak memakai durasi HTTP atau menjalankan speed test.
+- [x] Hapus Ping dari widget/dashboard; trafik hanya Download dan Upload.
 - [x] Hapus package mock dan seluruh pemilih/label Demo; gunakan Live.
-- [x] Pertahankan singleton dashboard, always-on-top, ukuran/DPI, serta Coming soon.
+- [x] Pertahankan singleton dashboard, always-on-top, ukuran/DPI; hapus sidebar agar Overview memenuhi lebar halaman.
 - [x] Perbarui README dan checklist manual untuk implementasi live.
 - [x] Pemeriksaan statis source/import, formatting gofmt, dan whitespace Git.
 - [x] Verifikasi checksum dependency dengan `go mod verify`.
@@ -53,6 +65,6 @@ yang dapat mengakses modem. Tidak menambahkan unit test.
 
 - [ ] Verifikasi makna/konversi nv_rsrq dan nv_sinr dari sumber modem yang tepercaya
       sebelum mengganti label raw menjadi dB. Tidak menebak konversi.
-- Ping tidak tersedia pada kedua endpoint; tetap kosong tanpa tambahan probe.
-- Pengaturan URL, autentikasi otomatis, persistence, dan kontrol modem di luar scope.
+- Tidak menambahkan probe ping atau speed test.
+- Profil host/password disimpan via DPAPI; history/cookie tidak dipersist dan kontrol modem tetap di luar scope.
 - Tidak melakukan push ke remote kecuali diminta.

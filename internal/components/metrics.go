@@ -148,7 +148,6 @@ func ConnectionStats(gtx layout.Context, t *material.Theme, r model.Reading, com
 	return Row(gtx, 8,
 		stat("DOWNLOAD", Number(r.Download, 3), "Mbps"),
 		stat("UPLOAD", Number(r.Upload, 3), "Mbps"),
-		stat("PING", "—", "No API data"),
 	)
 }
 
