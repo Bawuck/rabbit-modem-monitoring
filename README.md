@@ -4,6 +4,9 @@ Aplikasi desktop Windows dengan Go + Gio: widget always-on-top, satu dashboard
 Overview, dan data modem live dari `192.168.100.1`. Semua UI ditulis dalam Go;
 tidak menggunakan HTML, CSS, JavaScript, Electron, atau WebView.
 
+Perangkat yang didukung: **modem Rabbit CP XR**. Kompatibilitas dengan tipe modem
+lain belum diverifikasi.
+
 **Status: form konfigurasi dan penyimpanan Windows DPAPI telah diimplementasikan.
 Perubahan terbaru belum dijalankan di GUI atau di-build/test; pemeriksaan terbatas pada source, formatting, dan diff.**
 
@@ -20,7 +23,7 @@ cd C:\Go\rabbit-monitoring
 go run .
 ```
 
-Untuk executable GUI tanpa console, gunakan opsi linker
+Untuk menjalankan GUI tanpa console melalui Go, gunakan opsi linker
 `go run -ldflags="-H windowsgui" .`.
 Cross-build varian biasa dan `windowsgui` sudah diverifikasi; eksekusi serta UAT
 tetap harus dilakukan langsung pada Windows yang terhubung ke modem.
@@ -28,8 +31,34 @@ tetap harus dilakukan langsung pada Windows yang terhubung ke modem.
 ## EXE portable dan startup Windows
 
 Aplikasi dapat dikemas sebagai satu EXE GUI tanpa installer atau Go di komputer tujuan.
-Konfigurasi tetap disimpan di LOCALAPPDATA, bukan di sebelah EXE. Pembuatan EXE terbaru
-belum selesai: build diblokir oleh instruksi larangan build/test dan memerlukan izin eksplisit.
+Go hanya diperlukan di komputer yang membuat EXE. Dari PowerShell pada Windows:
+
+```powershell
+cd C:\Go\rabbit-monitoring
+go build -trimpath -ldflags="-H windowsgui -s -w" -o "Rabbit Monitoring widget.exe" .
+```
+
+Hasilnya `C:\Go\rabbit-monitoring\Rabbit Monitoring widget.exe`. Klik dua kali file
+tersebut untuk membuka aplikasi, atau jalankan dari PowerShell:
+
+```powershell
+& ".\Rabbit Monitoring widget.exe"
+```
+
+Opsi `-H windowsgui` membuat aplikasi tanpa console; `-s -w` menghapus informasi
+debug untuk mengurangi ukuran EXE. Tutup aplikasi sebelum membuat ulang EXE pada
+lokasi yang sama. Perintah ini merupakan panduan; build terbaru belum diverifikasi.
+
+Salin EXE ke lokasi tetap pada komputer Windows tujuan; tidak perlu installer,
+source code, atau Go. Driver grafis yang kompatibel dan akses jaringan ke modem
+tetap diperlukan. Konfigurasi disimpan di LOCALAPPDATA, bukan di sebelah EXE.
+Isi konfigurasi pada komputer tujuan; password DPAPI tidak portabel antar pengguna Windows.
+
+Untuk menjalankan otomatis saat login Windows:
+
+1. Buka EXE dari lokasi tetap.
+2. Buka **Pengaturan** melalui dashboard atau tombol di kanan **Open Overview** pada widget.
+3. Aktifkan toggle **Start on startup**. Matikan toggle untuk menonaktifkannya.
 
 Toggle **Start on startup** tersedia di Pengaturan. Perubahan langsung diterapkan,
 tidak memerlukan Simpan & Hubungkan, dan tidak dibatalkan oleh tombol Batal form koneksi.
