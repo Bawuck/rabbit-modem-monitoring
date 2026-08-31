@@ -1,9 +1,11 @@
 # Checklist manual — integrasi modem live
 
-Belum dijalankan pada aplikasi hasil integrasi. Tidak membuat unit test atau
-menjalankan build/aplikasi dalam sesi implementasi. Checklist ini untuk pengguna
-saat menjalankan aplikasi; kasus respons khusus memerlukan lingkungan terkontrol,
-bukan perubahan konfigurasi atau gangguan sengaja pada modem produksi.
+Cross-build Windows amd64 biasa dan `windowsgui` sudah berhasil, tetapi aplikasi
+hasil integrasi belum dijalankan pada Windows. Checklist ini untuk pengguna saat
+menjalankan aplikasi; kasus respons khusus memerlukan lingkungan terkontrol,
+bukan perubahan konfigurasi atau gangguan sengaja pada modem produksi. Container
+verifikasi tidak dapat menjangkau `192.168.100.1`, jadi tidak ada item live atau
+visual di bawah ini yang ditandai selesai hanya berdasarkan pemeriksaan source.
 
 ## Window dan DPI
 

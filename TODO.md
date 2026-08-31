@@ -2,9 +2,9 @@
 
 Diperbarui: 31 Agustus 2026.
 
-Status: implementasi source selesai; verifikasi dibatasi pemeriksaan statis.
-Aplikasi hasil integrasi belum dikompilasi atau dijalankan. Tidak membuat unit
-test dan tidak menjalankan build/test sesuai instruksi pengguna.
+Status: implementasi source dan cross-build Windows selesai. Aplikasi belum
+dijalankan pada Windows dan verifikasi visual/live masih menunggu lingkungan
+yang dapat mengakses modem. Tidak menambahkan unit test.
 
 ## Selesai
 
@@ -23,15 +23,31 @@ test dan tidak menjalankan build/test sesuai instruksi pengguna.
 - [x] Pertahankan singleton dashboard, always-on-top, ukuran/DPI, serta Coming soon.
 - [x] Perbarui README dan checklist manual untuk implementasi live.
 - [x] Pemeriksaan statis source/import, formatting gofmt, dan whitespace Git.
+- [x] Verifikasi checksum dependency dengan `go mod verify`.
+- [x] Cross-build Windows amd64 biasa dan `windowsgui` dengan CGO nonaktif.
+- [x] Jalankan `go vet ./...` untuk target Windows amd64 tanpa temuan.
+- [x] Type-check package non-window melalui `go test`; tidak ada file unit test.
 
 ## Belum diverifikasi — pekerjaan pengguna berikutnya
 
-- [ ] Jalankan aplikasi secara manual ketika diizinkan, lalu catat hasil runtime.
+- [ ] Jalankan executable pada Windows, lalu catat hasil runtime.
 - [ ] Periksa ukuran/DPI, keterbacaan widget, scroll, dan singleton dashboard.
 - [ ] Bandingkan data live serta konversi throughput dengan respons modem terbaru.
 - [ ] Periksa stale, partial failure, No Signal, timeout, dan pemulihan koneksi.
 - [ ] Periksa grafik, batas history, dan pembatalan request saat aplikasi keluar.
 - [ ] Selesaikan item yang relevan di MANUAL-CHECKLIST.md.
+
+## Catatan verifikasi 31 Agustus 2026
+
+- Cross-build menghasilkan executable PE32+ x86-64 dengan Go 1.27.0.
+- Build target Linux tidak dapat diselesaikan karena image tidak menyediakan
+  development package `xkbcommon` dan `wayland-client` yang dibutuhkan Gio.
+  Ini merupakan batasan environment Linux, bukan error kompilasi source target
+  Windows.
+- Endpoint `192.168.100.1:80` tidak dapat dijangkau dari container verifikasi,
+  sehingga respons modem terbaru dan perilaku polling live belum diuji ulang.
+- Aplikasi GUI Windows tidak dapat dijalankan di container Linux ini; seluruh
+  item visual, DPI, lifecycle window, dan shutdown tetap membutuhkan UAT.
 
 ## Batasan yang sengaja dipertahankan
 

@@ -4,8 +4,9 @@ Aplikasi desktop Windows dengan Go + Gio: widget always-on-top, satu dashboard
 Overview, dan data modem live dari `192.168.100.1`. Semua UI ditulis dalam Go;
 tidak menggunakan HTML, CSS, JavaScript, Electron, atau WebView.
 
-**Status: implementasi source dan pemeriksaan statis. Build dan aplikasi hasil
-integrasi belum dijalankan; tidak membuat atau menjalankan unit test.**
+**Status: implementasi source, cross-build Windows amd64, dan `go vet` target
+Windows sudah berhasil. Aplikasi belum dijalankan pada Windows dan data modem
+live belum diverifikasi ulang karena container tidak dapat mengakses LAN modem.**
 
 ## Menjalankan
 
@@ -22,8 +23,8 @@ go run ./cmd/4g-monitor
 
 Untuk executable GUI tanpa console, gunakan opsi linker
 `go run -ldflags="-H windowsgui" ./cmd/4g-monitor`.
-Perintah tersebut mengompilasi dan menjalankan aplikasi; tidak dijalankan selama
-implementasi ini.
+Cross-build varian biasa dan `windowsgui` sudah diverifikasi; eksekusi serta UAT
+tetap harus dilakukan langsung pada Windows yang terhubung ke modem.
 
 ## Window dan tampilan
 
@@ -113,9 +114,16 @@ tanpa cookie/login tambahan, dengan JSON ber-Content-Type text/html.
 JavaScript modem memformat throughput bytes/detik menjadi bit/detik dengan ×8.
 Temuan tersebut tidak membuktikan runtime client Go atau UI hasil integrasi.
 
-Pemeriksaan implementasi terbatas pada parsing/format `gofmt`, penelusuran
-import dan source, review alur data/lifecycle, serta `git diff --check`.
-Tidak menjalankan `go build`, `go run`, `go test`, `go vet`, atau type-check penuh.
+Pemeriksaan lanjutan 31 Agustus 2026 mencakup `gofmt`, `git diff --check`,
+`go mod verify`, cross-build Windows amd64 dengan CGO nonaktif (biasa dan
+`windowsgui`), serta `go vet ./...` untuk target Windows. Package non-window juga
+berhasil di-type-check oleh `go test` dan tidak memiliki file unit test.
+
+Build/test native Linux berhenti pada dependency sistem Gio yang tidak tersedia,
+yaitu `xkbcommon` dan `wayland-client`. Ini tidak memengaruhi cross-build target
+Windows. Container tidak dapat menghubungi `192.168.100.1`, sehingga aplikasi
+GUI, data modem terbaru, polling live, DPI, dan lifecycle window masih memerlukan
+verifikasi manual pada Windows.
 
 Lihat [TODO.md](TODO.md) untuk status pekerjaan dan
 [MANUAL-CHECKLIST.md](MANUAL-CHECKLIST.md) untuk verifikasi pengguna.
